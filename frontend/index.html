@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocuAI - AI Document Analysis Platform</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="dark-mode">
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <nav class="navbar">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>DocuAI</span>
+                </div>
+                <ul class="nav-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#upload">Upload</a></li>
+                    <li><a href="#chat">Chat</a></li>
+                </ul>
+                <div class="header-actions">
+                    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                        <i class="fas fa-sun"></i>
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="btn-primary" onclick="startNewSession()">
+                        <i class="fas fa-plus"></i> New Session
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <i class="fas fa-sparkles"></i>
+                    <span>Powered by Advanced AI</span>
+                </div>
+                <h1>Transform Your Documents with AI</h1>
+                <p>Upload any document and get instant AI-powered summaries, intelligent search, and natural language Q&A. Experience the future of document analysis.</p>
+                <div class="hero-buttons">
+                    <button class="btn-primary btn-large" onclick="scrollToSection('upload')">
+                        <i class="fas fa-upload"></i> Get Started
+                    </button>
+                    <button class="btn-secondary btn-large" onclick="scrollToSection('features')">
+                        <i class="fas fa-info-circle"></i> Learn More
+                    </button>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <div class="stat-icon"><i class="fas fa-bolt"></i></div>
+                        <div class="stat-info">
+                            <strong>Instant</strong>
+                            <span>Processing</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-icon"><i class="fas fa-shield-check"></i></div>
+                        <div class="stat-info">
+                            <strong>Secure</strong>
+                            <span>& Private</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-icon"><i class="fas fa-robot"></i></div>
+                        <div class="stat-info">
+                            <strong>AI-Powered</strong>
+                            <span>Insights</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="floating-shapes">
+                    <div class="shape shape-1"></div>
+                    <div class="shape shape-2"></div>
+                    <div class="shape shape-3"></div>
+                </div>
+                <div class="feature-cards">
+                    <div class="mini-card">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>PDF Analysis</span>
+                    </div>
+                    <div class="mini-card">
+                        <i class="fas fa-image"></i>
+                        <span>OCR Extraction</span>
+                    </div>
+                    <div class="mini-card">
+                        <i class="fas fa-comments"></i>
+                        <span>Smart Q&A</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Features</span>
+                <h2>Powerful AI Capabilities</h2>
+                <p>Everything you need to analyze and understand your documents</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h3>Easy Upload</h3>
+                    <p>Drag and drop or click to upload PDFs and images. Supports multiple file formats with instant processing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-magic"></i>
+                    </div>
+                    <h3>AI Summarization</h3>
+                    <p>Get concise, intelligent summaries of your documents in seconds using advanced language models.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-search-plus"></i>
+                    </div>
+                    <h3>Smart Search</h3>
+                    <p>Ask questions in natural language and get accurate, context-aware answers from your documents.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <h3>RAG Technology</h3>
+                    <p>Advanced Retrieval Augmented Generation ensures responses are grounded in your document content.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Upload Section -->
+    <section id="upload" class="upload-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Upload</span>
+                <h2>Upload Your Document</h2>
+                <p>Support for PDF, PNG, JPG, JPEG - Maximum 10MB</p>
+            </div>
+
+            <div class="upload-container">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <h3>Drop your file here</h3>
+                        <p>or click to browse</p>
+                        <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.txt" hidden>
+                        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-folder-open"></i> Choose File
+                        </button>
+                        <div class="supported-formats">
+                            <span><i class="fas fa-file-pdf"></i> PDF</span>
+                            <span><i class="fas fa-file-image"></i> Images</span>
+                            <span><i class="fas fa-file-alt"></i> Text</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="processing-overlay" id="processingOverlay" style="display: none;">
+                    <div class="processing-content">
+                        <div class="spinner"></div>
+                        <h3>Processing Document...</h3>
+                        <p>Extracting text and analyzing content</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-container" id="resultsContainer" style="display: none;">
+                    <div class="results-header">
+                        <i class="fas fa-check-circle"></i>
+                        <h3>Document Processed Successfully</h3>
+                    </div>
+                    <div class="results-grid">
+                        <div class="result-box full-width">
+                            <div class="result-title">
+                                <i class="fas fa-file-alt"></i>
+                                <h4>AI Summary</h4>
+                            </div>
+                            <div class="result-content" id="summaryContent">
+                                <p>Your AI-generated summary will appear here...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section id="chat" class="chat-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">AI Assistant</span>
+                <h2>Chat About Your Document</h2>
+                <p>Ask questions and get intelligent answers</p>
+            </div>
+
+            <div class="chat-container">
+                <div class="chat-sidebar">
+                    <div class="sidebar-info">
+                        <div class="info-item">
+                            <i class="fas fa-clock"></i>
+                            <div class="info-content">
+                                <strong>Session Started</strong>
+                                <span id="sessionTime">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-secondary btn-full" onclick="clearChat()">
+                        <i class="fas fa-trash-alt"></i> Clear Chat
+                    </button>
+                </div>
+
+                <div class="chat-main">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="welcome-message">
+                            <div class="ai-avatar">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="message-bubble welcome">
+                                <strong>Welcome to DocuAI!</strong>
+                                <p>Upload a document to get started, or ask me anything. I'm here to help you understand and analyze your documents.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chat-input-area">
+                        <div class="quick-prompts">
+                            <button class="quick-prompt" onclick="sendQuickPrompt('Summarize the main points')">
+                                <i class="fas fa-list"></i> Main Points
+                            </button>
+                            <button class="quick-prompt" onclick="sendQuickPrompt('What are the key findings?')">
+                                <i class="fas fa-search"></i> Key Findings
+                            </button>
+                            <button class="quick-prompt" onclick="sendQuickPrompt('Explain this document')">
+                                <i class="fas fa-info-circle"></i> Explain
+                            </button>
+                        </div>
+                        <div class="chat-input-wrapper">
+                            <input 
+                                type="text" 
+                                id="chatInput" 
+                                class="chat-input" 
+                                placeholder="Ask a question about your document..."
+                                disabled
+                            >
+                            <button class="btn-send" id="sendButton" onclick="sendMessage()" disabled>
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <i class="fas fa-brain"></i>
+                        <span>DocuAI</span>
+                    </div>
+                    <p>AI-powered document analysis made simple and accessible for everyone.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="link-group">
+                        <h4>Product</h4>
+                        <a href="#features">Features</a>
+                        <a href="#upload">Upload</a>
+                        <a href="#chat">Chat</a>
+                    </div>
+                    <div class="link-group">
+                        <h4>Resources</h4>
+                        <a href="#">Documentation</a>
+                        <a href="#">API</a>
+                        <a href="#">Support</a>
+                    </div>
+                    <div class="link-group">
+                        <h4>Company</h4>
+                        <a href="#">About</a>
+                        <a href="#">Privacy</a>
+                        <a href="#">Terms</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 DocuAI. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</body>
+</html>
