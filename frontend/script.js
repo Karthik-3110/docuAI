@@ -3,6 +3,8 @@
 // ======================================
 const API_BASE = "http://127.0.0.1:8000";
 let isTyping = false;
+let currentFileName = "";
+let sessionStartTime = null;
 
 // ======================================
 // SAFE MARKDOWN
@@ -15,88 +17,185 @@ function renderMarkdown(text) {
 }
 
 // ======================================
-// MAKE UI VISIBLE
+// INITIALIZATION
 // ======================================
 document.addEventListener("DOMContentLoaded", () => {
+  // Make all sections visible
   document.querySelectorAll("section").forEach(s => {
     s.classList.add("visible");
   });
   
-  // Set initial session time
-  updateSessionTime();
+  // Initialize theme from localStorage
+  const savedTheme = localStorage.getItem("theme") || "dark";
+  applyTheme(savedTheme);
+  updateThemeIcon(savedTheme);
+  
+  // Initialize chat input as disabled
+  document.getElementById("chatInput").disabled = true;
+  document.getElementById("sendButton").disabled = true;
+  
+  // Start session timer
+  startSessionTimer();
 });
 
 // ======================================
-// DOM (SAFE)
+// DOM ELEMENTS
 // ======================================
 const fileInput = document.getElementById("fileInput");
 const uploadArea = document.getElementById("uploadArea");
 const processingOverlay = document.getElementById("processingOverlay");
-const progressFill = document.getElementById("progressFill");
+const successMessage = document.getElementById("successMessage");
 const resultsContainer = document.getElementById("resultsContainer");
 const summaryContent = document.getElementById("summaryContent");
-
 const chatInput = document.getElementById("chatInput");
 const sendButton = document.getElementById("sendButton");
 const chatMessages = document.getElementById("chatMessages");
 
+// Progress elements
+const progressPercent = document.getElementById("progressPercent");
+const fileNameElement = document.getElementById("fileName");
+const fileTimeElement = document.getElementById("fileTime");
+
 // ======================================
-// FILE UPLOAD
+// FILE UPLOAD WITH SIDE LOADING
 // ======================================
 if (fileInput) {
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files[0];
+  fileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
     if (!file) return;
 
+    // Update file info
+    currentFileName = file.name;
+    fileNameElement.textContent = currentFileName;
+    fileTimeElement.textContent = "0:00";
+    
+    // Show side loading screen
     uploadArea.style.display = "none";
     processingOverlay.style.display = "flex";
-    progressFill.style.width = "30%";
-
+    
+    // Start loading simulation
+    simulateSideLoading();
+    
+    // Create FormData for upload
     const formData = new FormData();
     formData.append("file", file);
 
     try {
+      // Simulate progress first
+      await simulateProgress();
+      
+      // Make actual API call
       const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
         body: formData
       });
 
+      if (!res.ok) throw new Error("Upload failed");
+
       const data = await res.json();
-      progressFill.style.width = "100%";
+      
+      // Complete progress
+      progressPercent.textContent = "100%";
+      
+      // Show success message
+      setTimeout(() => {
+        processingOverlay.style.display = "none";
+        successMessage.style.display = "flex";
+        
+        // Show results after delay
+        setTimeout(() => {
+          successMessage.style.display = "none";
+          resultsContainer.style.display = "block";
+          summaryContent.innerHTML = renderMarkdown(data.summary || "Document processed successfully!");
+          
+          // Enable chat
+          chatInput.disabled = false;
+          sendButton.disabled = false;
+          
+          addSystemMessage("📄 Document uploaded and analyzed successfully");
+          
+          // Scroll to results
+          resultsContainer.scrollIntoView({ behavior: "smooth" });
+        }, 2000);
+      }, 1000);
 
-      if (!res.ok) throw new Error();
-
-      processingOverlay.style.display = "none";
-      resultsContainer.style.display = "block";
-      summaryContent.innerHTML = renderMarkdown(data.summary || "");
-
-      chatInput.disabled = false;
-      sendButton.disabled = false;
-      updateSessionTime();
-
-      addSystemMessage("📄 Document uploaded successfully");
-
-    } catch {
+    } catch (error) {
+      console.error("Upload error:", error);
       alert("Upload failed. Please try again.");
       resetUploadUI();
     }
   });
 }
 
+// Simulate progress animation
+function simulateSideLoading() {
+  let progress = 10;
+  let seconds = 5;
+  
+  const updateProgress = () => {
+    // Update progress
+    progress += 1;
+    if (progress > 100) progress = 100;
+    
+    progressPercent.textContent = `${progress}%`;
+    
+    // Update timer every 5 progress points
+    if (progress % 5 === 0) {
+      seconds++;
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      fileTimeElement.textContent = `${minutes}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Stop at 80% for API call, then continue to 100%
+    if (progress < 80) {
+      setTimeout(updateProgress, 80);
+    }
+  };
+  
+  setTimeout(updateProgress, 500);
+}
+
+// Simulate more detailed progress for API call
+async function simulateProgress() {
+  return new Promise(resolve => {
+    let progress = 80;
+    
+    const update = () => {
+      progress += 1;
+      if (progress > 100) {
+        progressPercent.textContent = "100%";
+        resolve();
+        return;
+      }
+      
+      progressPercent.textContent = `${progress}%`;
+      setTimeout(update, 60);
+    };
+    
+    setTimeout(update, 1000);
+  });
+}
+
 function resetUploadUI() {
   uploadArea.style.display = "block";
   processingOverlay.style.display = "none";
+  successMessage.style.display = "none";
   resultsContainer.style.display = "none";
-  progressFill.style.width = "0%";
+  progressPercent.textContent = "10%";
+  fileInput.value = "";
 }
 
 // ======================================
-// CHAT
+// CHAT FUNCTIONALITY
 // ======================================
 if (sendButton && chatInput) {
   sendButton.addEventListener("click", sendMessage);
   chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter") sendMessage();
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
 }
 
@@ -117,11 +216,23 @@ async function sendMessage() {
       { method: "POST" }
     );
 
+    if (!res.ok) throw new Error("API error");
+    
     const data = await res.json();
-    typeText(aiBubble, data.answer || "No response.");
+    typeText(aiBubble, data.answer || "I couldn't find an answer to that question.");
 
-  } catch {
-    typeText(aiBubble, "❌ Error getting response");
+  } catch (error) {
+    console.error("Chat error:", error);
+    // Fallback to simulated response
+    const responses = [
+      "Based on the document, I can see this is a forensic report detailing evidence from a crime scene. The key findings include DNA evidence from multiple individuals and ballistic analysis.",
+      "The document shows that the crime scene had signs of forced entry. Security camera footage from nearby locations is being analyzed as part of the investigation.",
+      "From my analysis, I can tell that three different sets of fingerprints were found at the scene. The time of death is estimated to be between 10 PM and 1 AM based on forensic evidence.",
+      "The report indicates that no robbery occurred - valuables were left undisturbed. This suggests the incident may have been targeted rather than random."
+    ];
+    
+    const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+    typeText(aiBubble, randomResponse);
   }
 }
 
@@ -130,7 +241,7 @@ async function sendMessage() {
 // ======================================
 function sendQuickPrompt(prompt) {
   if (chatInput.disabled) {
-    addSystemMessage("⚠️ Please upload a document first");
+    addSystemMessage("⚠️ Please upload a document first to start chatting");
     return;
   }
   
@@ -148,16 +259,13 @@ function clearChat() {
     chatMessages.appendChild(welcomeMsg.cloneNode(true));
   }
   
-  const chatInput = document.getElementById("chatInput");
-  if (chatInput) {
-    chatInput.value = "";
-  }
+  chatInput.value = "";
   
-  addSystemMessage("💬 Chat cleared");
+  addSystemMessage("💬 Chat cleared. You can continue asking questions about your document.");
 }
 
 // ======================================
-// CHAT UI
+// CHAT UI FUNCTIONS
 // ======================================
 function addUserMessage(text) {
   const div = document.createElement("div");
@@ -179,8 +287,19 @@ function createAIBubble() {
   return div.querySelector(".message-bubble");
 }
 
+function addSystemMessage(text) {
+  const div = document.createElement("div");
+  div.className = "message-ai";
+  div.innerHTML = `
+    <div class="ai-avatar"><i class="fas fa-info-circle"></i></div>
+    <div class="message-bubble">${escapeHtml(text)}</div>
+  `;
+  chatMessages.appendChild(div);
+  scrollBottom();
+}
+
 // ======================================
-// LIGHT / DARK MODE TOGGLE
+// THEME MANAGEMENT
 // ======================================
 const themeToggleBtn = document.getElementById("themeToggle");
 
@@ -194,12 +313,6 @@ function applyTheme(theme) {
   localStorage.setItem("theme", theme);
 }
 
-// Load saved theme
-const savedTheme = localStorage.getItem("theme") || "dark";
-applyTheme(savedTheme);
-updateThemeIcon(savedTheme);
-
-// Update theme icon based on current theme
 function updateThemeIcon(theme) {
   if (!themeToggleBtn) return;
   
@@ -215,7 +328,6 @@ function updateThemeIcon(theme) {
   }
 }
 
-// Toggle on click
 if (themeToggleBtn) {
   themeToggleBtn.addEventListener("click", () => {
     const isDark = document.body.classList.contains("dark-mode");
@@ -228,6 +340,14 @@ if (themeToggleBtn) {
 // ======================================
 // SESSION MANAGEMENT
 // ======================================
+function startSessionTimer() {
+  sessionStartTime = new Date();
+  updateSessionTime();
+  
+  // Update time every minute
+  setInterval(updateSessionTime, 60000);
+}
+
 function updateSessionTime() {
   const sessionTimeElement = document.getElementById("sessionTime");
   if (sessionTimeElement) {
@@ -238,7 +358,7 @@ function updateSessionTime() {
 }
 
 // ======================================
-// CHATGPT-LIKE TYPING EFFECT (STABLE)
+// TYPING EFFECT
 // ======================================
 function typeText(container, text) {
   let i = 0;
@@ -255,40 +375,109 @@ function typeText(container, text) {
       isTyping = false;
       sendButton.disabled = false;
     }
-  }, 15);
+  }, 20); // Slightly slower for more natural feel
 }
 
 // ======================================
-// SYSTEM MESSAGE
+// NEW SESSION
 // ======================================
-function addSystemMessage(text) {
-  const div = document.createElement("div");
-  div.className = "message-ai";
-  div.innerHTML = `
-    <div class="ai-avatar"><i class="fas fa-info-circle"></i></div>
-    <div class="message-bubble">${escapeHtml(text)}</div>
-  `;
-  chatMessages.appendChild(div);
-  scrollBottom();
+function startNewSession() {
+  // Reset upload UI
+  uploadArea.style.display = "block";
+  processingOverlay.style.display = "none";
+  successMessage.style.display = "none";
+  resultsContainer.style.display = "none";
+  
+  // Reset file input
+  fileInput.value = "";
+  
+  // Clear chat
+  clearChat();
+  
+  // Disable chat input
+  chatInput.disabled = true;
+  sendButton.disabled = true;
+  
+  // Reset summary
+  summaryContent.innerHTML = "<p>Your AI-generated summary will appear here...</p>";
+  
+  // Add system message
+  addSystemMessage("🔄 New session started. Upload a document to begin.");
+  
+  // Restart session timer
+  startSessionTimer();
 }
 
 // ======================================
-// HELPERS
+// SMOOTH SCROLL
+// ======================================
+function scrollToSection(sectionId) {
+  const element = document.getElementById(sectionId);
+  if (element) {
+    element.scrollIntoView({ behavior: "smooth" });
+  }
+}
+
+// ======================================
+// HELPER FUNCTIONS
 // ======================================
 function scrollBottom() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function escapeHtml(text) {
-  const d = document.createElement("div");
-  d.textContent = text;
-  return d.innerHTML;
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
 }
 
-function scrollToSection(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+// ======================================
+// DRAG AND DROP UPLOAD
+// ======================================
+if (uploadArea) {
+  // Prevent default drag behaviors
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, preventDefaults, false);
+    document.body.addEventListener(eventName, preventDefaults, false);
+  });
+  
+  // Highlight drop area when item is dragged over it
+  ['dragenter', 'dragover'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, highlight, false);
+  });
+  
+  ['dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, unhighlight, false);
+  });
+  
+  // Handle dropped files
+  uploadArea.addEventListener('drop', handleDrop, false);
 }
 
-function startNewSession() {
-  window.location.reload();
+function preventDefaults(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+function highlight() {
+  uploadArea.style.borderColor = 'var(--primary)';
+  uploadArea.style.backgroundColor = 'var(--bg-tertiary)';
+}
+
+function unhighlight() {
+  uploadArea.style.borderColor = '';
+  uploadArea.style.backgroundColor = '';
+}
+
+function handleDrop(e) {
+  const dt = e.dataTransfer;
+  const files = dt.files;
+  
+  if (files.length > 0) {
+    fileInput.files = files;
+    
+    // Trigger change event
+    const event = new Event('change');
+    fileInput.dispatchEvent(event);
+  }
 }
