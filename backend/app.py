@@ -5,29 +5,22 @@ from typing import Dict, List
 from datetime import datetime
 import hashlib
 import os, io
-
 import pdfplumber
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
 from groq import Groq
 
-# =========================
-# CONFIG
-# =========================
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")    
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY missing")
 
 MAX_CONTEXT_CHARS = 3000
 MAX_CHUNKS = 3
 
-# =========================
-# APP
-# =========================
-app = FastAPI(title="DocuAI Backend")
+app = FastAPI(title="ReadLess Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,18 +29,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# STORAGE
-# =========================
 sessions: Dict[str, Dict] = {}
 LAST_SESSION_ID: str | None = None   # 🔥 AUTO SESSION FIX
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 llm = Groq(api_key=GROQ_API_KEY)
 
-# =========================
-# HELPERS
-# =========================
 def create_session_id() -> str:
     return hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:12]
 
@@ -75,7 +62,6 @@ def ask_llm(prompt: str) -> str:
         print("LLM Error:", e)
         return "I could not generate an answer."
 
-
 def split_chunks(text: str, size: int = 800) -> List[str]:
     words = text.split()
     chunks, current, length = [], [], 0
@@ -94,7 +80,6 @@ def split_chunks(text: str, size: int = 800) -> List[str]:
 
     return chunks
 
-
 def index_text(session_id: str, text: str):
     chunks = split_chunks(text)
     index = faiss.IndexFlatL2(384)
@@ -106,7 +91,6 @@ def index_text(session_id: str, text: str):
         "index": index,
         "created_at": datetime.now().isoformat()
     }
-
 
 def retrieve(session_id: str, question: str) -> str:
     session = sessions.get(session_id)
@@ -123,10 +107,6 @@ def retrieve(session_id: str, question: str) -> str:
 
     return context[:MAX_CONTEXT_CHARS]
 
-
-# =========================
-# UPLOAD
-# =========================
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
     global LAST_SESSION_ID
@@ -146,7 +126,7 @@ async def upload(file: UploadFile = File(...)):
     session_id = create_session_id()
     index_text(session_id, text)
 
-    LAST_SESSION_ID = session_id  # 🔥 remember last upload
+    LAST_SESSION_ID = session_id
 
     summary = ask_llm(
         "Summarize this document in 3–4 bullet points:\n\n" + text[:2500]
@@ -157,10 +137,6 @@ async def upload(file: UploadFile = File(...)):
         "summary": summary
     }
 
-
-# =========================
-# ASK (AUTO SESSION FIX)
-# =========================
 @app.post("/ask")
 async def ask(request: Request):
     global LAST_SESSION_ID
@@ -174,7 +150,7 @@ async def ask(request: Request):
     question = body.get("question") or request.query_params.get("question")
     session_id = body.get("session_id") or request.query_params.get("session_id")
 
-    # 🔥 AUTO-ATTACH TO LAST SESSION
+    #AUTO-ATTACH TO LAST SESSION
     if not session_id:
         session_id = LAST_SESSION_ID
 
@@ -201,6 +177,22 @@ QUESTION:
 {question}
 
 Answer strictly from the document.
+You are ReadLess, a professional document intelligence system.
+
+You do NOT answer from general knowledge.
+You ONLY answer from the provided document context.
+
+Your goals:
+1. Extract precise information from documents.
+2. Provide fact-based answers.
+3. Never hallucinate.
+4. Clearly say "Not found in document" if data is missing.
+5. Use simple professional language.
+6. Be legally and academically safe.
+
+You are not a chatbot — you are a document analysis engine.
+
+Answer 
 """
 
     answer = ask_llm(prompt)
@@ -211,10 +203,6 @@ Answer strictly from the document.
         "context_used": True
     }
 
-
-# =========================
-# HEALTH
-# =========================
 @app.get("/health")
 def health():
     return {"status": "ok"}
