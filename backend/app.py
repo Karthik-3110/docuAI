@@ -1,9 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from typing import Dict, List
-from datetime import datetime
-import hashlib
 import os, io
 import pdfplumber
 import numpy as np
@@ -13,12 +10,9 @@ from groq import Groq
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")    
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     raise RuntimeError("GROQ_API_KEY missing")
-
-MAX_CONTEXT_CHARS = 3000
-MAX_CHUNKS = 3
 
 app = FastAPI(title="ReadLess Backend")
 
@@ -29,42 +23,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-sessions: Dict[str, Dict] = {}
-LAST_SESSION_ID: str | None = None   # 🔥 AUTO SESSION FIX
+# GLOBAL MEMORY (ChatGPT style)
+document_chunks = []
+faiss_index = None
+chat_history = []
+
+MAX_CHUNKS = 3
+MAX_CONTEXT_CHARS = 3000
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 llm = Groq(api_key=GROQ_API_KEY)
 
-def create_session_id() -> str:
-    return hashlib.md5(str(datetime.now().timestamp()).encode()).hexdigest()[:12]
+# Ask AI
+def ask_llm(messages):
+    res = llm.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=messages,
+        temperature=0.0,
+        max_tokens=400
+    )
+    return res.choices[0].message.content.strip()
 
-
-def ask_llm(prompt: str) -> str:
-    try:
-        res = llm.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a document-based assistant. "
-                        "Answer ONLY using the document context. "
-                        "If the answer is not present, say so clearly."
-                    )
-                },
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.0,
-            max_tokens=400
-        )
-        return res.choices[0].message.content.strip()
-    except Exception as e:
-        print("LLM Error:", e)
-        return "I could not generate an answer."
-
-def split_chunks(text: str, size: int = 800) -> List[str]:
+# Split document into chunks
+def split_chunks(text, size=800):
     words = text.split()
-    chunks, current, length = [], [], 0
+    chunks, current = [], []
+    length = 0
 
     for w in words:
         if length + len(w) > size:
@@ -80,41 +64,15 @@ def split_chunks(text: str, size: int = 800) -> List[str]:
 
     return chunks
 
-def index_text(session_id: str, text: str):
-    chunks = split_chunks(text)
-    index = faiss.IndexFlatL2(384)
-    vectors = embedder.encode(chunks)
-    index.add(np.array(vectors))
-
-    sessions[session_id] = {
-        "chunks": chunks,
-        "index": index,
-        "created_at": datetime.now().isoformat()
-    }
-
-def retrieve(session_id: str, question: str) -> str:
-    session = sessions.get(session_id)
-    if not session:
-        return ""
-
-    q_vec = embedder.encode([question])
-    _, ids = session["index"].search(np.array(q_vec), MAX_CHUNKS)
-
-    context = ""
-    for i in ids[0]:
-        if i < len(session["chunks"]):
-            context += session["chunks"][i] + "\n\n"
-
-    return context[:MAX_CONTEXT_CHARS]
-
+# Upload PDF
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
-    global LAST_SESSION_ID
+    global document_chunks, faiss_index, chat_history
 
-    text = ""
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF supported")
 
+    text = ""
     with pdfplumber.open(io.BytesIO(await file.read())) as pdf:
         for page in pdf.pages:
             if page.extract_text():
@@ -123,23 +81,45 @@ async def upload(file: UploadFile = File(...)):
     if not text.strip():
         raise HTTPException(400, "No text extracted")
 
-    session_id = create_session_id()
-    index_text(session_id, text)
+    # Reset memory for new document
+    chat_history = []
 
-    LAST_SESSION_ID = session_id
+    # Split and embed
+    document_chunks = split_chunks(text)
+    vectors = embedder.encode(document_chunks)
 
-    summary = ask_llm(
-        "Summarize this document in 3–4 bullet points:\n\n" + text[:2500]
-    )
+    faiss_index = faiss.IndexFlatL2(384)
+    faiss_index.add(np.array(vectors))
 
-    return {
-        "session_id": session_id,
-        "summary": summary
-    }
+    # Create summary
+    summary_prompt = [
+        {"role": "system", "content": "Summarize this document in 3–4 bullet points."},
+        {"role": "user", "content": text[:2500]}
+    ]
 
+    summary = ask_llm(summary_prompt)
+
+    return {"summary": summary}
+
+# Retrieve relevant document text
+def retrieve(question):
+    if not faiss_index:
+        return ""
+
+    q_vec = embedder.encode([question])
+    _, ids = faiss_index.search(np.array(q_vec), MAX_CHUNKS)
+
+    context = ""
+    for i in ids[0]:
+        if i < len(document_chunks):
+            context += document_chunks[i] + "\n\n"
+
+    return context[:MAX_CONTEXT_CHARS]
+
+# Ask Question
 @app.post("/ask")
 async def ask(request: Request):
-    global LAST_SESSION_ID
+    global chat_history
 
     body = {}
     try:
@@ -148,61 +128,50 @@ async def ask(request: Request):
         pass
 
     question = body.get("question") or request.query_params.get("question")
-    session_id = body.get("session_id") or request.query_params.get("session_id")
-
-    #AUTO-ATTACH TO LAST SESSION
-    if not session_id:
-        session_id = LAST_SESSION_ID
-
     if not question:
-        raise HTTPException(400, "Question is required")
+        raise HTTPException(400, "Question required")
 
-    if not session_id or session_id not in sessions:
-        return {
-            "answer": "Please upload a document before asking questions."
-        }
+    if not faiss_index:
+        return {"answer": "Please upload a document first."}
 
-    context = retrieve(session_id, question)
+    context = retrieve(question)
 
     if not context:
-        return {
-            "answer": "I do not have enough information about that in the document."
-        }
+        return {"answer": "Not found in document."}
 
-    prompt = f"""
-DOCUMENT CONTEXT:
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are ReadLess, a document analysis AI. "
+            "Answer ONLY from the given document. "
+            "If not found, say 'Not found in document'."
+        )
+    }
+
+    prompt = {
+        "role": "user",
+        "content": f"""
+DOCUMENT:
 {context}
 
 QUESTION:
 {question}
 
 Answer strictly from the document.
-You are ReadLess, a professional document intelligence system.
-
-You do NOT answer from general knowledge.
-You ONLY answer from the provided document context.
-
-Your goals:
-1. Extract precise information from documents.
-2. Provide fact-based answers.
-3. Never hallucinate.
-4. Clearly say "Not found in document" if data is missing.
-5. Use simple professional language.
-6. Be legally and academically safe.
-
-You are not a chatbot — you are a document analysis engine.
-
-Answer 
 """
-
-    answer = ask_llm(prompt)
-
-    return {
-        "answer": answer,
-        "session_id": session_id,
-        "context_used": True
     }
 
+    messages = [system_message] + chat_history + [prompt]
+
+    answer = ask_llm(messages)
+
+    # Save conversation
+    chat_history.append({"role": "user", "content": question})
+    chat_history.append({"role": "assistant", "content": answer})
+
+    return {"answer": answer}
+
+# Health
 @app.get("/health")
 def health():
     return {"status": "ok"}
